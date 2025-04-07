@@ -1,0 +1,47 @@
+{
+  "jobs": {
+    "data": [
+      {
+        "id": 1,
+        "job_title": "Software Engineer",
+        "company": "TechCorp",
+        "location": "Remote",
+        "description": "Develop and maintain web applications.",
+        "requirements": "3+ years experience, JavaScript, React",
+        "apply_url": "https://techcorp.com/apply/1"
+      },
+      {
+        "id": 2,
+        "job_title": "Data Analyst",
+        "company": "DataWorks",
+        "location": "New York",
+        "description": "Analyze data and generate reports.",
+        "requirements": "SQL, Python, 2+ years experience",
+        "apply_url": "https://dataworks.com/apply/2"
+      },
+      {
+        "id": 3,
+        "job_title": "UI/UX Designer",
+        "company": "DesignHub",
+        "location": "San Francisco",
+        "description": "Design user-friendly interfaces.",
+        "requirements": "Figma, Adobe XD, 1+ years experience",
+        "apply_url": "https://designhub.com/apply/3"
+      }
+    ], "current_page": 1,
+    "last_page": 1,
+    "per_page": 10,
+    "total": 3,
+  "users": [
+    {
+      "username": "user1",
+      "password": "pass123", 
+      "email": "user1@example.com"
+    },
+    {
+      "username": "user2",
+      "password": "pass456",
+      "email": "user2@example.com"
+    }
+  ]
+}}
