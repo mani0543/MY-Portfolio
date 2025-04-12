@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,22 +12,21 @@ import {
   Switch,
   Alert,
   Animated,
-  Easing,
   ActivityIndicator,
   Modal,
   Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { NavigationContainer, useNavigation } from '@react-navigation/native';
+import { NavigationContainer, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
 
 // API Configurations
-const UNSPLASH_API_KEY = 'iehS7oUIC_OUu4FLWG9TO2e3vSNJzU-4MQNR2X31Fco'; // Your Unsplash API key
-const GEMINI_API_KEY = 'AIzaSyDprjz_UkKdmvm84oIOUuChn9aVgK-muZ0'; // Your Gemini API key
+const UNSPLASH_API_KEY = 'iehS7oUIC_OUu4FLWG9TO2e3vSNJzU-4MQNR2X31Fco'; // Replace with your Unsplash API key
+const GEMINI_API_KEY = 'AIzaSyCkz9K9HbqaGvrsX2uxWffYXl_zNmJrWrI'; // Replace with your Gemini API key
 const UNSPLASH_API_URL = 'https://api.unsplash.com/photos/';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash';
 const POSTS_PER_PAGE = 10;
@@ -182,10 +181,6 @@ function FeedScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  useEffect(() => {
-    fetchPosts();
-  }, []);
-
   const fetchPosts = async () => {
     try {
       const response = await axios.get(`${UNSPLASH_API_URL}?client_id=${UNSPLASH_API_KEY}&per_page=${POSTS_PER_PAGE}`);
@@ -200,7 +195,7 @@ function FeedScreen() {
         comments: [],
         category: ['Photography', 'Travel', 'Food', 'Technology', 'Art'][Math.floor(Math.random() * 5)],
       }));
-      globalPosts = [...fetchedPosts, ...globalPosts]; // Append fetched posts to global state
+      globalPosts = [...globalPosts, ...fetchedPosts.filter((fp) => !globalPosts.some((gp) => gp.id === fp.id))]; // Avoid duplicates
       setPosts(globalPosts);
     } catch (error) {
       Alert.alert('Error', 'Failed to load posts');
@@ -209,6 +204,18 @@ function FeedScreen() {
       setLoading(false);
     }
   };
+
+  // Sync with globalPosts when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      setPosts([...globalPosts]); // Update local state with globalPosts
+      if (globalPosts.length === 0) {
+        fetchPosts(); // Fetch if no posts exist
+      } else {
+        setLoading(false);
+      }
+    }, [])
+  );
 
   const handleLike = (postId) => {
     const updatedPosts = posts.map((post) =>
@@ -469,9 +476,9 @@ function CreatePostScreen({ navigation }) {
   const handlePost = () => {
     if (image && caption) {
       const newPost = {
-        id: Date.now().toString(),
+        id: `user_${Date.now()}`, // Ensure unique ID
         username: 'You',
-        userImage: 'https://i.pravatar.cc/150?img=3', // Replace with actual user image if available
+        userImage: 'https://i.pravatar.cc/150?img=3',
         postImage: image,
         caption,
         likes: 0,
@@ -479,11 +486,11 @@ function CreatePostScreen({ navigation }) {
         comments: [],
         category: 'User Post',
       };
-      globalPosts = [newPost, ...globalPosts]; // Add new post to the top of the feed
+      globalPosts = [newPost, ...globalPosts];
       Alert.alert('Post Created', 'Your post has been shared successfully!');
       setCaption('');
       setImage(null);
-      navigation.navigate('Feed'); // Navigate to Feed to see the new post
+      navigation.navigate('Feed');
     } else {
       Alert.alert('Error', 'Please add an image and a caption');
     }
