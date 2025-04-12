@@ -18,11 +18,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { NavigationContainer, useNavigation, useFocusEffect } from '@react-navigation/native';
+import { NavigationContainer, useFocusEffect } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
+import moment from 'moment';
 
 // API Configurations
 const UNSPLASH_API_KEY = 'iehS7oUIC_OUu4FLWG9TO2e3vSNJzU-4MQNR2X31Fco'; // Replace with your Unsplash API key
@@ -33,6 +34,65 @@ const POSTS_PER_PAGE = 10;
 
 // Global state to share posts across screens
 let globalPosts = [];
+
+// Welcome Screen Component
+function WelcomeScreen({ navigation }) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const translateYAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 5,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.delay(1000),
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateYAnim, {
+          toValue: -200,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start(() => {
+      navigation.replace('Login');
+    });
+  }, [navigation]);
+
+  return (
+    <LinearGradient
+      colors={['#4ECDC4', '#FF6B6B']}
+      style={styles.welcomeScreenContainer}
+    >
+      <Animated.View
+        style={[
+          styles.welcomeScreenContent,
+          {
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }, { translateY: translateYAnim }],
+          },
+        ]}
+      >
+        <Text style={styles.welcomeScreenText}>Welcome to Social Media App</Text>
+      </Animated.View>
+    </LinearGradient>
+  );
+}
 
 // Login Screen Component
 function LoginScreen({ navigation }) {
@@ -110,6 +170,11 @@ function SignupScreen({ navigation }) {
       colors={isDark ? ['#0F2027', '#203A43', '#2C5364'] : ['#E0EAFC', '#CFDEF3']}
       style={styles.loginContainer}
     >
+      <View style={styles.backButtonContainer}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={28} color={isDark ? '#FFF' : '#000'} />
+        </TouchableOpacity>
+      </View>
       <WelcomeMessage />
       <View style={styles.loginForm}>
         <TextInput
@@ -194,8 +259,9 @@ function FeedScreen() {
         liked: false,
         comments: [],
         category: ['Photography', 'Travel', 'Food', 'Technology', 'Art'][Math.floor(Math.random() * 5)],
+        createdAt: new Date().toISOString(),
       }));
-      globalPosts = [...globalPosts, ...fetchedPosts.filter((fp) => !globalPosts.some((gp) => gp.id === fp.id))]; // Avoid duplicates
+      globalPosts = [...globalPosts, ...fetchedPosts.filter((fp) => !globalPosts.some((gp) => gp.id === fp.id))];
       setPosts(globalPosts);
     } catch (error) {
       Alert.alert('Error', 'Failed to load posts');
@@ -205,12 +271,11 @@ function FeedScreen() {
     }
   };
 
-  // Sync with globalPosts when screen is focused
   useFocusEffect(
     useCallback(() => {
-      setPosts([...globalPosts]); // Update local state with globalPosts
+      setPosts([...globalPosts]);
       if (globalPosts.length === 0) {
-        fetchPosts(); // Fetch if no posts exist
+        fetchPosts();
       } else {
         setLoading(false);
       }
@@ -285,6 +350,9 @@ function FeedScreen() {
           </TouchableOpacity>
         </View>
         <Text style={[styles.postCaption, isDark && styles.darkText]}>{item.caption}</Text>
+        <Text style={[styles.postTime, isDark && styles.darkText]}>
+          {moment(item.createdAt).fromNow()}
+        </Text>
         <View style={styles.postStats}>
           <Text style={[styles.postStat, isDark && styles.darkText]}>{item.likes} likes</Text>
           <Text style={[styles.postStat, isDark && styles.darkText]}>{item.comments.length} comments</Text>
@@ -338,8 +406,142 @@ function FeedScreen() {
   );
 }
 
+// Post Detail Screen Component
+function PostDetailScreen({ route, navigation }) {
+  const { postId } = route.params;
+  const [post, setPost] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
+  useEffect(() => {
+    const selectedPost = globalPosts.find((p) => p.id === postId);
+    if (selectedPost) {
+      setPost(selectedPost);
+    } else {
+      Alert.alert('Error', 'Post not found');
+    }
+  }, [postId]);
+
+  const handleLike = () => {
+    const updatedPost = {
+      ...post,
+      liked: !post.liked,
+      likes: post.liked ? post.likes - 1 : post.likes + 1,
+    };
+    setPost(updatedPost);
+    globalPosts = globalPosts.map((p) => (p.id === postId ? updatedPost : p));
+  };
+
+  const handleComment = () => {
+    setModalVisible(true);
+  };
+
+  const submitComment = () => {
+    if (!commentText.trim()) return;
+    const updatedPost = {
+      ...post,
+      comments: [...post.comments, { id: Date.now().toString(), text: commentText, user: 'You' }],
+    };
+    setPost(updatedPost);
+    globalPosts = globalPosts.map((p) => (p.id === postId ? updatedPost : p));
+    setCommentText('');
+    setModalVisible(false);
+  };
+
+  const handleShare = async () => {
+    try {
+      const result = await Share.share({
+        message: `${post.caption} - Check out this post on Horizon!`,
+        url: post.postImage,
+        title: 'Share Post',
+      });
+      if (result.action === Share.sharedAction) {
+        Alert.alert('Success', 'Post shared successfully!');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to share post');
+      console.error(error);
+    }
+  };
+
+  if (!post) return <ActivityIndicator size="large" color="#007AFF" style={styles.loading} />;
+
+  return (
+    <View style={[styles.container, isDark && styles.darkContainer]}>
+      <View style={styles.backButtonContainer}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={28} color={isDark ? '#FFF' : '#000'} />
+        </TouchableOpacity>
+      </View>
+      <View style={[styles.postContainer, isDark && styles.darkPostContainer]}>
+        <View style={styles.postHeader}>
+          <Image source={{ uri: post.userImage }} style={styles.postUserImage} />
+          <Text style={[styles.postUsername, isDark && styles.darkText]}>{post.username}</Text>
+        </View>
+        <Image source={{ uri: post.postImage }} style={styles.postImage} />
+        <View style={styles.postFooter}>
+          <View style={styles.postActions}>
+            <TouchableOpacity onPress={handleLike}>
+              <Ionicons
+                name={post.liked ? 'heart' : 'heart-outline'}
+                size={28}
+                color={post.liked ? '#FF4444' : isDark ? '#FFF' : '#000'}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleComment}>
+              <Ionicons name="chatbubble-outline" size={28} color={isDark ? '#FFF' : '#000'} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleShare}>
+              <Ionicons name="share-social-outline" size={28} color={isDark ? '#FFF' : '#000'} />
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.postCaption, isDark && styles.darkText]}>{post.caption}</Text>
+          <Text style={[styles.postTime, isDark && styles.darkText]}>{moment(post.createdAt).fromNow()}</Text>
+          <View style={styles.postStats}>
+            <Text style={[styles.postStat, isDark && styles.darkText]}>{post.likes} likes</Text>
+            <Text style={[styles.postStat, isDark && styles.darkText]}>{post.comments.length} comments</Text>
+          </View>
+          {post.comments.map((comment) => (
+            <Text key={comment.id} style={[styles.commentText, isDark && styles.darkText]}>
+              <Text style={styles.commentUser}>{comment.user}: </Text>{comment.text}
+            </Text>
+          ))}
+        </View>
+      </View>
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, isDark && styles.darkModalContainer]}>
+            <TextInput
+              style={[styles.input, isDark && styles.darkInput]}
+              placeholder="Add a comment..."
+              placeholderTextColor={isDark ? '#A9A9A9' : '#666666'}
+              value={commentText}
+              onChangeText={setCommentText}
+            />
+            <TouchableOpacity style={styles.button} onPress={submitComment}>
+              <LinearGradient colors={['#007AFF', '#00C6FF']} style={styles.gradientButton}>
+                <Text style={styles.buttonText}>Post Comment</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <Text style={[styles.link, isDark && styles.darkText]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
 // Explore Screen Component
-function ExploreScreen() {
+function ExploreScreen({ navigation }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const [searchQuery, setSearchQuery] = useState('');
@@ -347,7 +549,7 @@ function ExploreScreen() {
   const [filteredPosts, setFilteredPosts] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const TRENDING_TOPICS = ['Photography', 'Travel', 'Food', 'Technology', 'Art'];
+  const TRENDING_TOPICS = ['Photography', 'Travel', 'Food', 'Te chnology', 'Art'];
 
   useEffect(() => {
     fetchCategoryPosts();
@@ -369,9 +571,11 @@ function ExploreScreen() {
           likes: Math.floor(Math.random() * 1000),
           comments: [],
           category,
+          createdAt: new Date().toISOString(),
         }));
         allPosts.push(...categoryPosts);
       }
+      globalPosts = [...globalPosts, ...allPosts.filter((ap) => !globalPosts.some((gp) => gp.id === ap.id))];
       setPosts(allPosts);
       setFilteredPosts(allPosts);
     } catch (error) {
@@ -410,10 +614,13 @@ function ExploreScreen() {
   );
 
   const renderPost = ({ item }) => (
-    <View style={[styles.postContainer, isDark && styles.darkPostContainer]}>
+    <TouchableOpacity
+      style={[styles.postContainer, isDark && styles.darkPostContainer]}
+      onPress={() => navigation.navigate('PostDetail', { postId: item.id })}
+    >
       <Image source={{ uri: item.postImage }} style={styles.explorePostImage} />
       <Text style={[styles.postCaption, isDark && styles.darkText]}>{item.caption}</Text>
-    </View>
+    </TouchableOpacity>
   );
 
   if (loading) return <ActivityIndicator size="large" color="#007AFF" style={styles.loading} />;
@@ -476,7 +683,7 @@ function CreatePostScreen({ navigation }) {
   const handlePost = () => {
     if (image && caption) {
       const newPost = {
-        id: `user_${Date.now()}`, // Ensure unique ID
+        id: `user_${Date.now()}`,
         username: 'You',
         userImage: 'https://i.pravatar.cc/150?img=3',
         postImage: image,
@@ -485,6 +692,7 @@ function CreatePostScreen({ navigation }) {
         liked: false,
         comments: [],
         category: 'User Post',
+        createdAt: new Date().toISOString(),
       };
       globalPosts = [newPost, ...globalPosts];
       Alert.alert('Post Created', 'Your post has been shared successfully!');
@@ -514,7 +722,7 @@ function CreatePostScreen({ navigation }) {
         multiline
       />
       <TouchableOpacity style={styles.button} onPress={handlePost}>
-        <LinearGradient colors={['#007AFF', '#00C6FF']} style={styles.gradientButton}>
+        <LinearGradient colors={['#007AFF', '#00C6FF']} style={steps.gradientButton}>
           <Text style={styles.buttonText}>Post</Text>
         </LinearGradient>
       </TouchableOpacity>
@@ -650,6 +858,98 @@ function ChatScreen() {
   );
 }
 
+// Settings Screen Component
+function SettingsScreen({ navigation, toggleDarkMode, isDarkMode }) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const [notifications, setNotifications] = useState(true);
+  const [privateAccount, setPrivateAccount] = useState(false);
+  const [deletingModalVisible, setDeletingModalVisible] = useState(false);
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to delete your account? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setDeletingModalVisible(true);
+            setTimeout(() => {
+              setDeletingModalVisible(false);
+              navigation.navigate('Login');
+            }, 2000);
+          },
+        },
+      ]
+    );
+  };
+
+  return (
+    <View style={[styles.container, isDark && styles.darkContainer]}>
+      <View style={styles.backButtonContainer}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={28} color={isDark ? '#FFF' : '#000'} />
+        </TouchableOpacity>
+      </View>
+      <ScrollView contentContainerStyle={styles.settingsContainer}>
+        <Text style={[styles.sectionTitle, isDark && styles.darkText]}>Settings</Text>
+        <View style={[styles.settingItem, isDark && styles.darkSettingItem]}>
+          <Text style={[styles.settingText, isDark && styles.darkText]}>Dark Mode</Text>
+          <Switch
+            value={isDarkMode}
+            onValueChange={toggleDarkMode}
+          />
+        </View>
+        <View style={[styles.settingItem, isDark && styles.darkSettingItem]}>
+          <Text style={[styles.settingText, isDark && styles.darkText]}>Notifications</Text>
+          <Switch
+            value={notifications}
+            onValueChange={() => {
+              setNotifications(!notifications);
+              Alert.alert(
+                'Notifications',
+                notifications ? 'Notifications disabled.' : 'Notifications enabled.'
+              );
+            }}
+          />
+        </View>
+        <View style={[styles.settingItem, isDark && styles.darkSettingItem]}>
+          <Text style={[styles.settingText, isDark && styles.darkText]}>Private Account</Text>
+          <Switch
+            value={privateAccount}
+            onValueChange={() => {
+              setPrivateAccount(!privateAccount);
+              Alert.alert(
+                'Privacy',
+                privateAccount ? 'Your account is now public.' : 'Your account is now private.'
+              );
+            }}
+          />
+        </View>
+        <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
+          <Text style={styles.deleteButtonText}>Delete Account</Text>
+        </TouchableOpacity>
+      </ScrollView>
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={deletingModalVisible}
+        onRequestClose={() => {}}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, isDark && styles.darkModalContainer]}>
+            <ActivityIndicator size="large" color="#007AFF" style={styles.modalSpinner} />
+            <Text style={[styles.modalText, isDark && styles.darkText]}>Deleting account...</Text>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
 // Profile Screen Component
 function ProfileScreen({ navigation }) {
   const colorScheme = useColorScheme();
@@ -744,6 +1044,15 @@ function ProfileScreen({ navigation }) {
         </LinearGradient>
       </TouchableOpacity>
 
+      <TouchableOpacity style={styles.settingsButton} onPress={() => navigation.navigate('Settings')}>
+        <LinearGradient colors={['#007AFF', '#00C6FF']} style={styles.gradientButton}>
+          <View style={styles.settingsButtonContent}>
+            <Ionicons name="settings-outline" size={24} color="#FFF" style={styles.settingsIcon} />
+            <Text style={styles.editButtonText}>Settings</Text>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutButtonText}>Logout</Text>
       </TouchableOpacity>
@@ -766,14 +1075,25 @@ export default function App() {
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName="Login"
+        initialRouteName="Welcome"
         screenOptions={{
           headerShown: false,
           cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
         }}
       >
+        <Stack.Screen name="Welcome" component={WelcomeScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Signup" component={SignupScreen} />
+        <Stack.Screen name="PostDetail" component={PostDetailScreen} />
+        <Stack.Screen name="Settings">
+          {({ navigation }) => (
+            <SettingsScreen
+              navigation={navigation}
+              toggleDarkMode={toggleDarkMode}
+              isDarkMode={isDarkMode}
+            />
+          )}
+        </Stack.Screen>
         <Stack.Screen name="Home">
           {() => (
             <Tab.Navigator
@@ -831,6 +1151,7 @@ export default function App() {
               />
               <Tab.Screen
                 name="Profile"
+                component={ProfileScreen}
                 options={{
                   tabBarIcon: ({ size, color }) => (
                     <Ionicons name="person" size={size} color={color} />
@@ -843,9 +1164,7 @@ export default function App() {
                     />
                   ),
                 }}
-              >
-                {({ navigation }) => <ProfileScreen navigation={navigation} />}
-              </Tab.Screen>
+              />
             </Tab.Navigator>
           )}
         </Stack.Screen>
@@ -905,6 +1224,7 @@ const styles = StyleSheet.create({
   postFooter: { padding: 15 },
   postActions: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },
   postCaption: { fontSize: 16, marginBottom: 10 },
+  postTime: { fontSize: 14, color: '#666666', marginBottom: 10 },
   postStats: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
   postStat: { fontSize: 14, color: '#666666' },
   commentText: { fontSize: 14, marginTop: 5 },
@@ -1032,6 +1352,13 @@ const styles = StyleSheet.create({
   statNumber: { fontSize: 22, fontWeight: '700' },
   statLabel: { fontSize: 16, color: '#666666' },
   editButton: { marginHorizontal: 20, marginTop: 20, borderRadius: 15, overflow: 'hidden' },
+  settingsButton: { marginHorizontal: 20, marginTop: 10, borderRadius: 15, overflow: 'hidden' },
+  settingsButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsIcon: { marginRight: 8 },
   editButtonText: { color: '#FFF', fontSize: 18, fontWeight: '600' },
   logoutButton: {
     marginHorizontal: 20,
@@ -1045,4 +1372,69 @@ const styles = StyleSheet.create({
   logoutButtonText: { color: '#FF4444', fontSize: 18, fontWeight: '600' },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingSpinner: { marginVertical: 10 },
+  backButtonContainer: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 1,
+  },
+  backButton: {
+    padding: 10,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  settingsContainer: { paddingBottom: 20 },
+  settingItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    padding: 15,
+    borderRadius: 15,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  darkSettingItem: { backgroundColor: '#1E1E1E' },
+  settingText: { fontSize: 18, fontWeight: '500' },
+  deleteButton: {
+    marginTop: 20,
+    paddingVertical: 12,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#FF4444',
+    alignItems: 'center',
+  },
+  deleteButtonText: { color: '#FF4444', fontSize: 18, fontWeight: '600' },
+  modalSpinner: { marginBottom: 10 },
+  modalText: { fontSize: 18, fontWeight: '600' },
+  welcomeScreenContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  welcomeScreenContent: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    padding: 30,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  welcomeScreenText: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#333',
+    textAlign: 'center',
+  },
 });
