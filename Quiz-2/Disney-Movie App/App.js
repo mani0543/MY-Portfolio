@@ -13,6 +13,8 @@ import {
   Alert,
   Linking,
   StatusBar,
+  PixelRatio,
+  Platform,
 } from 'react-native';
 import { NavigationContainer, useTheme } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -20,20 +22,75 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 
 const Stack = createStackNavigator();
 const API_KEY = 'deba99a9beecd2f1dd392d688eee4ef3'; // TMDB API Key
 const YOUTUBE_API_KEY = 'YOUR_YOUTUBE_API_KEY'; // Replace with your YouTube API key
 const BASE_URL = 'https://api.themoviedb.org/3';
 const FALLBACK_IMAGE = 'https://via.placeholder.com/342x513.png?text=No+Image';
+const DEFAULT_PROFILE_IMAGE = 'https://picsum.photos/200';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const DESIGN_WIDTH = 375;
 const scale = SCREEN_WIDTH / DESIGN_WIDTH;
+const fontScale = PixelRatio.getFontScale();
 
 const mockMovies = [
   { id: 1, title: 'The Lion King', poster_path: '/sKCr78OXqOEqrHOZckjiSpmPBDg.jpg', backdrop_path: '/sKCr78OXqOEqrHOZckjiSpmPBDg.jpg', overview: 'A young lion prince...', vote_average: 8.3, release_date: '1994-06-23' },
   { id: 2, title: 'Frozen', poster_path: '/kgwjIb2JDHRhNk13lmSxiClFjVk.jpg', backdrop_path: '/kgwjIb2JDHRhNk13lmSxiClFjVk.jpg', overview: 'A fearless princess...', vote_average: 7.3, release_date: '2013-11-27' },
 ];
+
+// SplashScreen Component
+const SplashScreen = ({ navigation }) => {
+  const fadeAnim = useState(new Animated.Value(0))[0];
+  const scaleAnim = useState(new Animated.Value(1))[0];
+  const translateYAnim = useState(new Animated.Value(0))[0];
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 1500,
+        useNativeDriver: true,
+        delay: 500,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1.5,
+        duration: 1500,
+        useNativeDriver: true,
+        delay: 500,
+      }),
+      Animated.timing(translateYAnim, {
+        toValue: -100 * scale,
+        duration: 1500,
+        useNativeDriver: true,
+        delay: 500,
+      }),
+    ]).start(() => {
+      navigation.replace('Login');
+    });
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [fadeAnim, scaleAnim, translateYAnim, navigation]);
+
+  return (
+    <LinearGradient colors={['#1E1E3F', '#3F2B96']} style={styles.container}>
+      <View style={styles.splashContainer}>
+        <Animated.Text
+          style={[
+            styles.splashText,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }, { translateY: translateYAnim }],
+            },
+          ]}
+        >
+          Welcome to CineVerse ✨
+        </Animated.Text>
+      </View>
+    </LinearGradient>
+  );
+};
 
 const App = () => {
   const [favorites, setFavorites] = useState([]);
@@ -41,6 +98,12 @@ const App = () => {
   const [theme, setTheme] = useState('dark');
   const [downloads, setDownloads] = useState([]);
   const [watchHistory, setWatchHistory] = useState([]);
+  const [profileData, setProfileData] = useState({
+    username: '',
+    bio: '',
+    favoriteGenre: '',
+    profilePhoto: DEFAULT_PROFILE_IMAGE,
+  });
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -50,11 +113,13 @@ const App = () => {
         const storedTheme = await AsyncStorage.getItem('theme');
         const storedDownloads = await AsyncStorage.getItem('downloads');
         const storedWatchHistory = await AsyncStorage.getItem('watchHistory');
+        const storedProfile = await AsyncStorage.getItem('profileData');
         if (storedUserId) setUserId(storedUserId);
         if (storedFavorites) setFavorites(JSON.parse(storedFavorites));
         if (storedTheme) setTheme(storedTheme);
         if (storedDownloads) setDownloads(JSON.parse(storedDownloads));
         if (storedWatchHistory) setWatchHistory(JSON.parse(storedWatchHistory));
+        if (storedProfile) setProfileData(JSON.parse(storedProfile));
       } catch (error) {
         console.error('Error loading user data:', error);
       }
@@ -89,6 +154,15 @@ const App = () => {
     }
   };
 
+  const saveProfileData = async (newProfileData) => {
+    try {
+      setProfileData(newProfileData);
+      await AsyncStorage.setItem('profileData', JSON.stringify(newProfileData));
+    } catch (error) {
+      console.error('Error saving profile data:', error);
+    }
+  };
+
   const toggleTheme = async () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
@@ -102,20 +176,54 @@ const App = () => {
     <NavigationContainer theme={themeStyles}>
       <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={themeStyles.colors.background} />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Splash" component={SplashScreen} />
         <Stack.Screen name="Login">
           {(props) => <LoginScreen {...props} setUserId={setUserId} theme={theme} />}
         </Stack.Screen>
         <Stack.Screen name="Home">
-          {(props) => <HomeScreen {...props} favorites={favorites} setFavorites={saveFavorites} userId={userId} theme={theme} toggleTheme={toggleTheme} watchHistory={watchHistory} setWatchHistory={saveWatchHistory} />}
+          {(props) => (
+            <HomeScreen
+              {...props}
+              favorites={favorites}
+              setFavorites={saveFavorites}
+              userId={userId}
+              theme={theme}
+              toggleTheme={toggleTheme}
+              watchHistory={watchHistory}
+              setWatchHistory={saveWatchHistory}
+            />
+          )}
         </Stack.Screen>
         <Stack.Screen name="MovieDetail">
-          {(props) => <MovieDetailScreen {...props} favorites={favorites} setFavorites={saveFavorites} downloads={downloads} setDownloads={saveDownloads} userId={userId} theme={theme} watchHistory={watchHistory} setWatchHistory={saveWatchHistory} />}
+          {(props) => (
+            <MovieDetailScreen
+              {...props}
+              favorites={favorites}
+              setFavorites={saveFavorites}
+              downloads={downloads}
+              setDownloads={saveDownloads}
+              userId={userId}
+              theme={theme}
+              watchHistory={watchHistory}
+              setWatchHistory={saveWatchHistory}
+            />
+          )}
         </Stack.Screen>
         <Stack.Screen name="Search">
           {(props) => <SearchScreen {...props} favorites={favorites} setFavorites={saveFavorites} userId={userId} theme={theme} />}
         </Stack.Screen>
         <Stack.Screen name="Profile">
-          {(props) => <ProfileScreen {...props} favorites={favorites} setUserId={setUserId} theme={theme} toggleTheme={toggleTheme} />}
+          {(props) => (
+            <ProfileScreen
+              {...props}
+              favorites={favorites}
+              setUserId={setUserId}
+              theme={theme}
+              toggleTheme={toggleTheme}
+              profileData={profileData}
+              setProfileData={saveProfileData}
+            />
+          )}
         </Stack.Screen>
         <Stack.Screen name="Favorites">
           {(props) => <FavoritesScreen {...props} favorites={favorites} setFavorites={saveFavorites} theme={theme} />}
@@ -295,19 +403,19 @@ const HomeScreen = ({ navigation, favorites, setFavorites, userId, theme, toggle
           <Text style={[styles.headerTitleShiny, { color: colors.text }]}>🌟 CineVerse</Text>
           <View style={styles.headerIcons}>
             <TouchableOpacity onPress={toggleTheme} style={styles.iconButton}>
-              <Ionicons name={theme === 'dark' ? 'moon' : 'sunny'} size={24} color={colors.primary} />
+              <Ionicons name={theme === 'dark' ? 'moon' : 'sunny'} size={24 * scale} color={colors.primary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.iconButton}>
-              <Ionicons name="search" size={24} color={colors.primary} />
+              <Ionicons name="search" size={24 * scale} color={colors.primary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Favorites')} style={styles.iconButton}>
-              <Ionicons name="heart" size={24} color={colors.primary} />
+              <Ionicons name="heart" size={24 * scale} color={colors.primary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={styles.iconButton}>
-              <Ionicons name="person" size={24} color={colors.primary} />
+              <Ionicons name="person" size={24 * scale} color={colors.primary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('WatchHistory')} style={styles.iconButton}>
-              <Ionicons name="time" size={24} color={colors.primary} />
+              <Ionicons name="time" size={24 * scale} color={colors.primary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -330,7 +438,7 @@ const HomeScreen = ({ navigation, favorites, setFavorites, userId, theme, toggle
           keyExtractor={(item) => `movie-${item.id}`}
           numColumns={2}
           columnWrapperStyle={styles.movieGrid}
-          contentContainerStyle={{ paddingBottom: 20 }}
+          contentContainerStyle={{ paddingBottom: 20 * scale }}
         />
       </ScrollView>
     </LinearGradient>
@@ -416,7 +524,7 @@ const MovieDetailScreen = ({ route, navigation, favorites, setFavorites, downloa
     <LinearGradient colors={theme === 'dark' ? ['#1E1E3F', '#3F2B96'] : ['#E0E7FF', '#A3BFFA']} style={styles.container}>
       <ScrollView contentContainerStyle={styles.detailContainerShiny}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButtonShiny}>
-          <Ionicons name="arrow-back" size={24} color={colors.primary} />
+          <Ionicons name="arrow-back" size={24 * scale} color={colors.primary} />
         </TouchableOpacity>
         <Animated.View style={[styles.imageContainerShiny, { opacity: fadeAnim }]}>
           <Image
@@ -438,7 +546,7 @@ const MovieDetailScreen = ({ route, navigation, favorites, setFavorites, downloa
               <TouchableOpacity key={star} onPress={() => rateMovie(star)}>
                 <Ionicons
                   name={star <= userRating ? 'star' : 'star-outline'}
-                  size={24}
+                  size={24 * scale}
                   color={star <= userRating ? '#FFD700' : colors.border}
                 />
               </TouchableOpacity>
@@ -510,7 +618,7 @@ const SearchScreen = ({ navigation, favorites, setFavorites, userId, theme }) =>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={[styles.searchHeaderShiny, { backgroundColor: colors.header }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButtonShiny}>
-            <Ionicons name="arrow-back" size={24} color={colors.primary} />
+            <Ionicons name="arrow-back" size={24 * scale} color={colors.primary} />
           </TouchableOpacity>
           <TextInput
             style={[styles.searchInputShiny, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
@@ -521,7 +629,7 @@ const SearchScreen = ({ navigation, favorites, setFavorites, userId, theme }) =>
             placeholderTextColor={colors.placeholder}
           />
           <TouchableOpacity onPress={searchMovies}>
-            <Ionicons name="search" size={24} color={colors.primary} />
+            <Ionicons name="search" size={24 * scale} color={colors.primary} />
           </TouchableOpacity>
         </View>
         {error && <Text style={[styles.errorTextShiny, { color: colors.error }]}>{error}</Text>}
@@ -536,63 +644,155 @@ const SearchScreen = ({ navigation, favorites, setFavorites, userId, theme }) =>
   );
 };
 
-const ProfileScreen = ({ navigation, favorites, setUserId, theme, toggleTheme }) => {
-  const [userEmail, setUserEmail] = useState('');
+const ProfileScreen = ({ navigation, favorites, setUserId, theme, toggleTheme, profileData, setProfileData }) => {
+  const [editingField, setEditingField] = useState(null);
+  const [tempValue, setTempValue] = useState('');
+  const [fadeAnim] = useState(new Animated.Value(0));
   const { colors } = useTheme();
 
   useEffect(() => {
-    const fetchUserEmail = async () => {
-      const email = await AsyncStorage.getItem('userId');
-      setUserEmail(email || 'Guest');
-    };
-    fetchUserEmail();
-  }, []);
+    Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
+  }, [fadeAnim]);
 
   const handleLogout = async () => {
     await AsyncStorage.removeItem('userId');
+    await AsyncStorage.removeItem('profileData');
     setUserId(null);
     navigation.navigate('Login');
+  };
+
+  const pickImage = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('Permission Denied', 'Please allow access to photos to change your profile picture.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      const newProfileData = { ...profileData, profilePhoto: result.assets[0].uri };
+      setProfileData(newProfileData);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
+
+  const startEditing = (field, value) => {
+    setEditingField(field);
+    setTempValue(value);
+  };
+
+  const saveField = () => {
+    if (editingField) {
+      const newProfileData = { ...profileData, [editingField]: tempValue };
+      setProfileData(newProfileData);
+      setEditingField(null);
+      setTempValue('');
+      Haptics.selectionAsync();
+    }
   };
 
   return (
     <LinearGradient colors={theme === 'dark' ? ['#1E1E3F', '#3F2B96'] : ['#E0E7FF', '#A3BFFA']} style={styles.container}>
       <ScrollView contentContainerStyle={styles.profileContainerShiny}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButtonShiny}>
-          <Ionicons name="arrow-back" size={24} color={colors.primary} />
+          <Ionicons name="arrow-back" size={24 * scale} color={colors.primary} />
         </TouchableOpacity>
-        <Image source={{ uri: 'https://picsum.photos/200' }} style={styles.profileImageShiny} />
-        <Text style={[styles.profileNameShiny, { color: colors.text }]}>{userEmail}</Text>
-        <Text style={[styles.profileBioShiny, { color: colors.text }]}>Movie Enthusiast | {favorites.length} Favorites</Text>
-        <TouchableOpacity style={styles.buttonShiny} onPress={() => navigation.navigate('EditProfile')}>
-          <LinearGradient colors={['#10B981', '#34D399']} style={styles.buttonGradientShiny}>
-            <Text style={styles.buttonTextShiny}>Edit Profile</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonShiny} onPress={toggleTheme}>
-          <LinearGradient colors={['#8B5CF6', '#A78BFA']} style={styles.buttonGradientShiny}>
-            <Text style={styles.buttonTextShiny}>Toggle {theme === 'dark' ? 'Light' : 'Dark'} Mode</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonShiny} onPress={() => navigation.navigate('Favorites')}>
-          <LinearGradient colors={['#3B82F6', '#60A5FA']} style={styles.buttonGradientShiny}>
-            <Text style={styles.buttonTextShiny}>View Favorites</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonShiny} onPress={() => navigation.navigate('DownloadHistory')}>
-          <LinearGradient colors={['#F59E0B', '#FCD34D']} style={styles.buttonGradientShiny}>
-            <Text style={styles.buttonTextShiny}>Download History</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonShiny} onPress={() => navigation.navigate('WatchHistory')}>
-          <LinearGradient colors={['#EC4899', '#F472B6']} style={styles.buttonGradientShiny}>
-            <Text style={styles.buttonTextShiny}>Watch History</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonShiny} onPress={handleLogout}>
-          <LinearGradient colors={['#EF4444', '#F87171']} style={styles.buttonGradientShiny}>
-            <Text style={styles.buttonTextShiny}>Logout</Text>
-          </LinearGradient>
-        </TouchableOpacity>
+        <Animated.View style={{ opacity: fadeAnim, alignItems: 'center' }}>
+          <TouchableOpacity onPress={pickImage}>
+            <Image
+              source={{ uri: profileData.profilePhoto || DEFAULT_PROFILE_IMAGE }}
+              style={styles.profileImageShiny}
+            />
+            <View style={styles.editPhotoOverlay}>
+              <Ionicons name="camera" size={20 * scale} color="#FFF" />
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => startEditing('username', profileData.username)}>
+            {editingField === 'username' ? (
+              <TextInput
+                style={[styles.profileInput, { backgroundColor: colors.card, color: colors.text }]}
+                value={tempValue}
+                onChangeText={setTempValue}
+                onBlur={saveField}
+                autoFocus
+              />
+            ) : (
+              <Text style={[styles.profileNameShiny, { color: colors.text }]}>
+                {profileData.username || 'Set Username'}
+              </Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => startEditing('bio', profileData.bio)}>
+            {editingField === 'bio' ? (
+              <TextInput
+                style={[styles.profileInput, { backgroundColor: colors.card, color: colors.text }]}
+                value={tempValue}
+                onChangeText={setTempValue}
+                onBlur={saveField}
+                multiline
+                autoFocus
+              />
+            ) : (
+              <Text style={[styles.profileBioShiny, { color: colors.text }]}>
+                {profileData.bio || 'Tap to add a bio'}
+              </Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => startEditing('favoriteGenre', profileData.favoriteGenre)}>
+            {editingField === 'favoriteGenre' ? (
+              <TextInput
+                style={[styles.profileInput, { backgroundColor: colors.card, color: colors.text }]}
+                value={tempValue}
+                onChangeText={setTempValue}
+                onBlur={saveField}
+                autoFocus
+              />
+            ) : (
+              <Text style={[styles.profileBioShiny, { color: colors.text }]}>
+                Favorite Genre: {profileData.favoriteGenre || 'Tap to set genre'}
+              </Text>
+            )}
+          </TouchableOpacity>
+          <Text style={[styles.profileStats, { color: colors.text }]}>
+            Favorites: {favorites.length} | Movies Watched: {Math.floor(Math.random() * 50)}
+          </Text>
+          <TouchableOpacity style={styles.buttonShiny} onPress={() => navigation.navigate('EditProfile')}>
+            <LinearGradient colors={['#10B981', '#34D399']} style={styles.buttonGradientShiny}>
+              <Text style={styles.buttonTextShiny}>Edit Account Details</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.buttonShiny} onPress={toggleTheme}>
+            <LinearGradient colors={['#8B5CF6', '#A78BFA']} style={styles.buttonGradientShiny}>
+              <Text style={styles.buttonTextShiny}>Toggle {theme === 'dark' ? 'Light' : 'Dark'} Mode</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.buttonShiny} onPress={() => navigation.navigate('Favorites')}>
+            <LinearGradient colors={['#3B82F6', '#60A5FA']} style={styles.buttonGradientShiny}>
+              <Text style={styles.buttonTextShiny}>View Favorites</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.buttonShiny} onPress={() => navigation.navigate('DownloadHistory')}>
+            <LinearGradient colors={['#F59E0B', '#FCD34D']} style={styles.buttonGradientShiny}>
+              <Text style={styles.buttonTextShiny}>Download History</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.buttonShiny} onPress={() => navigation.navigate('WatchHistory')}>
+            <LinearGradient colors={['#EC4899', '#F472B6']} style={styles.buttonGradientShiny}>
+              <Text style={styles.buttonTextShiny}>Watch History</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.buttonShiny} onPress={handleLogout}>
+            <LinearGradient colors={['#EF4444', '#F87171']} style={styles.buttonGradientShiny}>
+              <Text style={styles.buttonTextShiny}>Logout</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </Animated.View>
       </ScrollView>
     </LinearGradient>
   );
@@ -624,7 +824,7 @@ const EditProfileScreen = ({ navigation, userId, theme }) => {
     <LinearGradient colors={theme === 'dark' ? ['#1E1E3F', '#3F2B96'] : ['#E0E7FF', '#A3BFFA']} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButtonShiny}>
-          <Ionicons name="arrow-back" size={24} color={colors.primary} />
+          <Ionicons name="arrow-back" size={24 * scale} color={colors.primary} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text }]}>Edit Profile</Text>
         <TextInput
@@ -671,7 +871,7 @@ const FavoritesScreen = ({ navigation, favorites, setFavorites, theme }) => {
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={[styles.headerShiny, { backgroundColor: colors.header }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButtonShiny}>
-            <Ionicons name="arrow-back" size={24} color={colors.primary} />
+            <Ionicons name="arrow-back" size={24 * scale} color={colors.primary} />
           </TouchableOpacity>
           <Text style={[styles.headerTitleShiny, { color: colors.text }]}>❤️ Favorites ({favorites.length})</Text>
         </View>
@@ -710,7 +910,7 @@ const DownloadsScreen = ({ route, navigation, downloads, setDownloads, theme }) 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={[styles.headerShiny, { backgroundColor: colors.header }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButtonShiny}>
-            <Ionicons name="arrow-back" size={24} color={colors.primary} />
+            <Ionicons name="arrow-back" size={24 * scale} color={colors.primary} />
           </TouchableOpacity>
           <Text style={[styles.headerTitleShiny, { color: colors.text }]}>⬇️ Downloads ({downloads.length})</Text>
         </View>
@@ -754,7 +954,7 @@ const DownloadHistoryScreen = ({ navigation, downloads, theme }) => {
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={[styles.headerShiny, { backgroundColor: colors.header }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButtonShiny}>
-            <Ionicons name="arrow-back" size={24} color={colors.primary} />
+            <Ionicons name="arrow-back" size={24 * scale} color={colors.primary} />
           </TouchableOpacity>
           <Text style={[styles.headerTitleShiny, { color: colors.text }]}>📜 Download History ({downloads.length})</Text>
         </View>
@@ -765,7 +965,7 @@ const DownloadHistoryScreen = ({ navigation, downloads, theme }) => {
             data={downloads}
             renderItem={renderDownload}
             keyExtractor={(item) => `download-history-${item.id}`}
-            contentContainerStyle={{ paddingBottom: 20 }}
+            contentContainerStyle={{ paddingBottom: 20 * scale }}
           />
         )}
       </ScrollView>
@@ -799,7 +999,7 @@ const WatchHistoryScreen = ({ navigation, watchHistory, setWatchHistory, theme }
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={[styles.headerShiny, { backgroundColor: colors.header }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButtonShiny}>
-            <Ionicons name="arrow-back" size={24} color={colors.primary} />
+            <Ionicons name="arrow-back" size={24 * scale} color={colors.primary} />
           </TouchableOpacity>
           <Text style={[styles.headerTitleShiny, { color: colors.text }]}>⏳ Watch History ({watchHistory.length})</Text>
         </View>
@@ -816,7 +1016,7 @@ const WatchHistoryScreen = ({ navigation, watchHistory, setWatchHistory, theme }
               data={watchHistory}
               renderItem={renderHistoryItem}
               keyExtractor={(item) => `watch-${item.id}`}
-              contentContainerStyle={{ paddingBottom: 20 }}
+              contentContainerStyle={{ paddingBottom: 20 * scale }}
             />
           </>
         )}
@@ -855,52 +1055,216 @@ const lightTheme = {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContainer: { paddingBottom: 20, flexGrow: 1 },
-  loginContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  title: { fontSize: 36, fontWeight: 'bold', marginBottom: 40, textAlign: 'center' },
-  inputShiny: { width: '100%', padding: 15, borderRadius: 12, marginBottom: 20, fontSize: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
-  buttonShiny: { width: '100%', marginVertical: 10 },
-  buttonGradientShiny: { padding: 15, borderRadius: 12, alignItems: 'center' },
-  buttonTextShiny: { color: '#FFF', fontSize: 16, fontWeight: '600' },
-  toggleText: { fontSize: 14, marginTop: 20 },
-  headerShiny: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
-  headerTitleShiny: { fontSize: 24, fontWeight: 'bold' },
-  headerIcons: { flexDirection: 'row', gap: 15 },
-  iconButton: { padding: 5 },
+  splashContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  splashText: {
+    fontSize: 36 * fontScale,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 2 * scale, height: 2 * scale },
+    textShadowRadius: 4 * scale,
+  },
+  scrollContainer: { paddingBottom: 20 * scale, flexGrow: 1 },
+  loginContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 * scale },
+  title: { fontSize: 36 * fontScale, fontWeight: 'bold', marginBottom: 40 * scale, textAlign: 'center' },
+  inputShiny: {
+    width: '100%',
+    padding: 15 * scale,
+    borderRadius: 12 * scale,
+    marginBottom: 20 * scale,
+    fontSize: 16 * fontScale,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 * scale },
+    shadowOpacity: 0.2,
+    shadowRadius: 8 * scale,
+    elevation: 3,
+  },
+  buttonShiny: { width: '90%', marginVertical: 10 * scale, alignSelf: 'center' },
+  buttonGradientShiny: { padding: 15 * scale, borderRadius: 12 * scale, alignItems: 'center' },
+  buttonTextShiny: { color: '#FFF', fontSize: 16 * fontScale, fontWeight: '600' },
+  toggleText: { fontSize: 14 * fontScale, marginTop: 20 * scale },
+  headerShiny: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15 * scale,
+    borderBottomWidth: 1 * scale,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  headerTitleShiny: { fontSize: 24 * fontScale, fontWeight: 'bold' },
+  headerIcons: { flexDirection: 'row', gap: 15 * scale },
+  iconButton: { padding: 5 * scale },
   featuredListShiny: { height: SCREEN_HEIGHT * 0.35 },
-  featuredCardShiny: { width: SCREEN_WIDTH, height: '100%', borderRadius: 16, overflow: 'hidden', elevation: 5 },
+  featuredCardShiny: {
+    width: SCREEN_WIDTH,
+    height: '100%',
+    borderRadius: 16 * scale,
+    overflow: 'hidden',
+    elevation: 5,
+  },
   featuredImageShiny: { width: '100%', height: '100%', resizeMode: 'cover' },
-  featuredOverlayShiny: { position: 'absolute', bottom: 0, width: '100%', padding: 15 },
-  featuredTitleShiny: { fontSize: 20, fontWeight: 'bold' },
-  sectionTitleShiny: { fontSize: 20, fontWeight: '600', padding: 15 },
-  movieGrid: { justifyContent: 'space-between', paddingHorizontal: 10 },
-  movieCardShiny: { width: SCREEN_WIDTH * 0.45, margin: 5, borderRadius: 12, padding: 10, elevation: 3 },
-  movieImageShiny: { width: '100%', height: SCREEN_HEIGHT * 0.25, borderRadius: 8, marginBottom: 5 },
-  movieTitleShiny: { fontSize: 14, fontWeight: '500', textAlign: 'center' },
-  detailContainerShiny: { alignItems: 'center', paddingBottom: 20 },
-  imageContainerShiny: { width: '100%', height: SCREEN_HEIGHT * 0.4, borderRadius: 16, overflow: 'hidden', marginBottom: 20 },
+  featuredOverlayShiny: { position: 'absolute', bottom: 0, width: '100%', padding: 15 * scale },
+  featuredTitleShiny: { fontSize: 20 * fontScale, fontWeight: 'bold' },
+  sectionTitleShiny: { fontSize: 20 * fontScale, fontWeight: '600', padding: 15 * scale },
+  movieGrid: { justifyContent: 'space-between', paddingHorizontal: 10 * scale },
+  movieCardShiny: {
+    width: SCREEN_WIDTH * 0.45,
+    margin: 5 * scale,
+    borderRadius: 12 * scale,
+    padding: 10 * scale,
+    elevation: 3,
+  },
+  movieImageShiny: {
+    width: '100%',
+    height: SCREEN_HEIGHT * 0.25,
+    borderRadius: 8 * scale,
+    marginBottom: 5 * scale,
+  },
+  movieTitleShiny: {
+    fontSize: 14 * fontScale,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  detailContainerShiny: { alignItems: 'center', paddingBottom: 20 * scale },
+  imageContainerShiny: {
+    width: '100%',
+    height: SCREEN_HEIGHT * 0.4,
+    borderRadius: 16 * scale,
+    overflow: 'hidden',
+    marginBottom: 20 * scale,
+  },
   detailImageShiny: { width: '100%', height: '100%', resizeMode: 'cover' },
   imageOverlayShiny: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  contentShiny: { width: '90%', borderRadius: 16, padding: 20, elevation: 5 },
-  detailTitleShiny: { fontSize: 28, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
-  detailOverviewShiny: { fontSize: 16, lineHeight: 24, marginBottom: 20 },
-  infoRowShiny: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  detailInfoShiny: { fontSize: 14 },
-  ratingContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 5 },
-  searchHeaderShiny: { flexDirection: 'row', alignItems: 'center', padding: 15 },
-  backButtonShiny: { padding: 10, position: 'absolute', top: 10, left: 10, zIndex: 1 },
-  searchInputShiny: { flex: 1, padding: 12, borderRadius: 12, marginRight: 10, fontSize: 16 },
-  searchListShiny: { padding: 15 },
-  searchResultShiny: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 12, marginBottom: 10, elevation: 2 },
-  searchImageShiny: { width: 60, height: 90, borderRadius: 8, marginRight: 10 },
-  searchTitleShiny: { fontSize: 16, flex: 1 },
-  profileContainerShiny: { alignItems: 'center', padding: 20 },
-  profileImageShiny: { width: 120, height: 120, borderRadius: 60, marginBottom: 20, borderWidth: 2, borderColor: '#FFD700' },
-  profileNameShiny: { fontSize: 24, fontWeight: 'bold', marginBottom: 10 },
-  profileBioShiny: { fontSize: 16, marginBottom: 20 },
-  errorTextShiny: { fontSize: 14, textAlign: 'center', margin: 10 },
-  noFavoritesText: { fontSize: 16, textAlign: 'center', marginTop: 20 },
-  downloadMessage: { fontSize: 16, textAlign: 'center', margin: 20 },
+  contentShiny: {
+    width: '90%',
+    borderRadius: 16 * scale,
+    padding: 20 * scale,
+    elevation: 5,
+  },
+  detailTitleShiny: {
+    fontSize: 28 * fontScale,
+    fontWeight: 'bold',
+    marginBottom: 10 * scale,
+    textAlign: 'center',
+  },
+  detailOverviewShiny: {
+    fontSize: 16 * fontScale,
+    lineHeight: 24 * scale,
+    marginBottom: 20 * scale,
+  },
+  infoRowShiny: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20 * scale,
+  },
+  detailInfoShiny: { fontSize: 14 * fontScale },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20 * scale,
+    gap: 5 * scale,
+  },
+  searchHeaderShiny: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15 * scale,
+  },
+  backButtonShiny: {
+    padding: 10 * scale,
+    position: 'absolute',
+    top: Platform.OS === 'android' ? StatusBar.currentHeight + 10 * scale : 10 * scale,
+    left: 10 * scale,
+    zIndex: 1,
+  },
+  searchInputShiny: {
+    flex: 1,
+    padding: 12 * scale,
+    borderRadius: 12 * scale,
+    marginRight: 10 * scale,
+    fontSize: 16 * fontScale,
+  },
+  searchListShiny: { padding: 15 * scale },
+  searchResultShiny: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10 * scale,
+    borderRadius: 12 * scale,
+    marginBottom: 10 * scale,
+    elevation: 2,
+  },
+  searchImageShiny: {
+    width: 60 * scale,
+    height: 90 * scale,
+    borderRadius: 8 * scale,
+    marginRight: 10 * scale,
+  },
+  searchTitleShiny: {
+    fontSize: 16 * fontScale,
+    flex: 1,
+  },
+  profileContainerShiny: {
+    alignItems: 'center',
+    padding: 20 * scale,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 20 * scale : 20 * scale,
+  },
+  profileImageShiny: {
+    width: 120 * scale,
+    height: 120 * scale,
+    borderRadius: 60 * scale,
+    marginBottom: 20 * scale,
+    borderWidth: 2 * scale,
+    borderColor: '#FFD700',
+  },
+  editPhotoOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 20 * scale,
+    padding: 5 * scale,
+  },
+  profileNameShiny: {
+    fontSize: 24 * fontScale,
+    fontWeight: 'bold',
+    marginBottom: 10 * scale,
+  },
+  profileBioShiny: {
+    fontSize: 16 * fontScale,
+    marginBottom: 10 * scale,
+    textAlign: 'center',
+  },
+  profileStats: {
+    fontSize: 14 * fontScale,
+    marginBottom: 20 * scale,
+  },
+  profileInput: {
+    width: SCREEN_WIDTH * 0.8,
+    padding: 10 * scale,
+    borderRadius: 8 * scale,
+    marginBottom: 10 * scale,
+    fontSize: 16 * fontScale,
+    textAlign: 'center',
+  },
+  errorTextShiny: {
+    fontSize: 14 * fontScale,
+    textAlign: 'center',
+    margin: 10 * scale,
+  },
+  noFavoritesText: {
+    fontSize: 16 * fontScale,
+    textAlign: 'center',
+    marginTop: 20 * scale,
+  },
+  downloadMessage: {
+    fontSize: 16 * fontScale,
+    textAlign: 'center',
+    margin: 20 * scale,
+  },
 });
 
 export default App;
