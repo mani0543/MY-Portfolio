@@ -630,7 +630,7 @@ const App = () => {
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
- lançou               <View style={styles.productRow}>
+           <View style={styles.productRow}>
                   {filteredProducts.length > 0 ? (
                     filteredProducts.map((product) => (
                       <ProductCard
